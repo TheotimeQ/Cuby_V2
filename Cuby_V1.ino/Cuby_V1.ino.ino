@@ -1,11 +1,39 @@
 //Libraries
 #include <Wire.h>//https://www.arduino.cc/en/reference/wire
 #include <Adafruit_PWMServoDriver.h>//https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library
+#include <FastLED.h>
 
 //Constants
 #define nbPCAServo 7 //Number of servo = 7 
 
-//Parameters
+//LED def
+#define NUM_STRIPS 6
+#define NUM_LEDS_STRIP_1 21
+#define NUM_LEDS_STRIP_2 27
+#define NUM_LEDS_STRIP_3 0
+#define NUM_LEDS_STRIP_4 0
+#define NUM_LEDS_STRIP_5 0
+#define NUM_LEDS_STRIP_6 0
+
+#define UPDATERATE 200
+
+CRGB Strip_1[NUM_LEDS_STRIP_1];
+CRGB Strip_2[NUM_LEDS_STRIP_2];
+//CRGB Strip_3[NUM_LEDS_STRIP_3];
+//CRGB Strip_4[NUM_LEDS_STRIP_4];
+//CRGB Strip_5[NUM_LEDS_STRIP_5];
+//CRGB Strip_6[NUM_LEDS_STRIP_6];
+
+const int Pin_Strip_1 = 7 ;
+const int Pin_Strip_2 = 9 ;
+const int Pin_Strip_3 = 6 ;
+const int Pin_Strip_4 = 10 ;
+const int Pin_Strip_5 = 11 ;
+const int Pin_Strip_6 = 12 ;
+
+int LED_Brightness = 70 ;
+
+//Parameters Servos
 // 0-Left arm | 1-Right arm | 2-Mouth | 3-Eyes | 4-Left eyebrow | 5-Right eyebrow | 6-Flag
 
 int MIN_IMP [nbPCAServo] = {500, 500, 500, 500, 500, 500, 500};
@@ -24,6 +52,7 @@ int BROWL_POS [3] = {70, 120, 170} ;      //{0, 90, 180}
 int BROWR_POS [3] = {120, 70, 20} ;      //{0, 90, 180} 
 int FLAG_POS [3] = {0, 90, 120} ;
 
+//Other Variables
 float Time ;
 float Time_0 ;
 
@@ -48,6 +77,20 @@ void setup(){
     pca.begin();
     pca.setPWMFreq(50);  // Analog servos run at ~50 Hz updates
 
+    //Setup LED
+    FastLED.addLeds<WS2812B, Pin_Strip_1>(Strip_1, NUM_LEDS_STRIP_1); //Strip 1
+    FastLED.addLeds<WS2812B, Pin_Strip_2>(Strip_2, NUM_LEDS_STRIP_2); //Strip 2
+    //FastLED.addLeds<WS2812B, Pin_Strip_3>(Strip_3, NUM_LEDS_STRIP_3); //Strip 1
+    //FastLED.addLeds<WS2812B, Pin_Strip_4>(Strip_4, NUM_LEDS_STRIP_4); //Strip 2
+    //FastLED.addLeds<WS2812B, Pin_Strip_5>(Strip_5, NUM_LEDS_STRIP_5); //Strip 1
+    //FastLED.addLeds<WS2812B, Pin_Strip_6>(Strip_6, NUM_LEDS_STRIP_6); //Strip 2
+    LED_POWER(LED_Brightness) ;
+    
+    //Initialise Color
+    LED_all_Black() ;
+    delay(1000);
+    LED_Color(120) ;
+
     Init();  // Initialise servos
     Time_0 = Min() ;
     Time = Min() ;
@@ -66,11 +109,9 @@ void setup(){
 //-----------------------------------------------------------Main Loop--------------------------------------------------------------
 void loop(){
     Time = Min() ;
-    
-    
     //Veille() ;
     //Animation() ;
-    CheckNoze() ;
+    //CheckNoze() ;
 }
 
 //---------------------------------------------------Moove predefined--------------------------------------------------------------
@@ -141,6 +182,45 @@ float Min() {
   Temps = NbRollOver*MinDebordement+CurrentMin ;
 
   return Temps ;
+}
+
+void LED_POWER(int Power){
+    int Brightness = (constrain(Power,0,100)*255)/100 ;
+    FastLED.setBrightness(Brightness);
+    Serial.print("LED Power set to : ") ;
+    Serial.println(Brightness) ;
+}
+
+//--------------------------------------------------------LED COLOR-----------------------------------------------------------
+void LED_all_Black(){
+  Serial.println("Black") ;
+  for(int i = 0; i < NUM_LEDS_STRIP_1; i++) {
+      //Serial.println(i) ;
+      Strip_1[i] = CRGB::Black;
+  }
+  for(int i = 0; i < NUM_LEDS_STRIP_2; i++) {
+      //Serial.println(i) ;
+      Strip_2[i] = CRGB::Black;
+  }
+  delay(1000/UPDATERATE);
+  FastLED.show();
+}
+
+void LED_Color(int Color){
+  Serial.println("Light") ;
+  for(int i = 0; i < NUM_LEDS_STRIP_1; i++) {
+      //Serial.println(i) ;
+      Strip_1[i] = CHSV(Color, 255, 255);
+      delay(1000/UPDATERATE);
+      FastLED.show();
+  }
+  for(int i = 0; i < NUM_LEDS_STRIP_2; i++) {
+      //Serial.println(i) ;
+      Strip_2[i] = CHSV(Color, 255, 255);
+      delay(1000/UPDATERATE);
+      FastLED.show();
+  }
+ 
 }
 
 //---------------------------------------------------------Moove One------------------------------------------------------------
