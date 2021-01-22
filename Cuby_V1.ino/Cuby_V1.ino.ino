@@ -2,36 +2,32 @@
 #include <Wire.h>//https://www.arduino.cc/en/reference/wire
 #include <Adafruit_PWMServoDriver.h>//https://github.com/adafruit/Adafruit-PWM-Servo-Driver-Library
 #include <FastLED.h>
+#include <CapacitiveSensor.h>
 
 //Constants
 #define nbPCAServo 7 //Number of servo = 7 
 
 //LED def
 #define NUM_STRIPS 6
-#define NUM_LEDS_STRIP_1 21
-#define NUM_LEDS_STRIP_2 27
-#define NUM_LEDS_STRIP_3 0
-#define NUM_LEDS_STRIP_4 0
-#define NUM_LEDS_STRIP_5 0
-#define NUM_LEDS_STRIP_6 0
+#define NUM_LEDS_STRIP_1 41
+#define NUM_LEDS_STRIP_2 29
 
-#define UPDATERATE 200
+#define UPDATERATE 25
 
 CRGB Strip_1[NUM_LEDS_STRIP_1];
 CRGB Strip_2[NUM_LEDS_STRIP_2];
-//CRGB Strip_3[NUM_LEDS_STRIP_3];
-//CRGB Strip_4[NUM_LEDS_STRIP_4];
-//CRGB Strip_5[NUM_LEDS_STRIP_5];
-//CRGB Strip_6[NUM_LEDS_STRIP_6];
 
 const int Pin_Strip_1 = 7 ;
 const int Pin_Strip_2 = 9 ;
-const int Pin_Strip_3 = 6 ;
-const int Pin_Strip_4 = 10 ;
-const int Pin_Strip_5 = 11 ;
-const int Pin_Strip_6 = 12 ;
 
-int LED_Brightness = 70 ;
+int LED_Brightness = 30 ;
+int Eye_Color = 200 ;
+int Body_Color = 0 ;  //   90 - Orange
+//Def capacitiv sensor
+CapacitiveSensor   cs_4_5 = CapacitiveSensor(4,5); 
+CapacitiveSensor   cs_4_8 = CapacitiveSensor(4,8); 
+long Capa_Sensor_1 ;
+long Capa_Sensor_2 ;
 
 //Parameters Servos
 // 0-Left arm | 1-Right arm | 2-Mouth | 3-Eyes | 4-Left eyebrow | 5-Right eyebrow | 6-Flag
@@ -41,20 +37,21 @@ int MAX_IMP [nbPCAServo] = {2500, 2500, 2500, 2500, 2500, 2500, 2500};
 int MIN_ANG [nbPCAServo] = {0, 0, 0, 0, 0, 0, 0};
 int MAX_ANG [nbPCAServo] = {180, 180, 180, 180, 180, 180, 180};
 
-int CURRENT_POS [nbPCAServo] = {10, 125, 139, 113, 120, 70, 0};      //Current angle of the servo
+int CURRENT_POS [nbPCAServo] = {80, 90, 116, 90, 90, 90, 65};      //Current angle of the servo
 int NEXT_POS [nbPCAServo] = {CURRENT_POS[0], CURRENT_POS[1], CURRENT_POS[2], CURRENT_POS[3], CURRENT_POS[4], CURRENT_POS[5], CURRENT_POS[6]};  //Next position for the servos
 
-int ARML_POS [3] = {10, 70, 80} ;
-int ARMR_POS [3] = {125, 60, 50} ;
-int MOUTH_POS [3] = {80, 120, 139} ;    //Stock predefined position ( for Fast and simple coding animation)
-int EYES_POS [3] = {92, 113, 128} ;
-int BROWL_POS [3] = {70, 120, 170} ;      //{0, 90, 180}
-int BROWR_POS [3] = {120, 70, 20} ;      //{0, 90, 180} 
-int FLAG_POS [3] = {0, 90, 120} ;
+int ARML_POS [3] = {70, 133, 144} ;
+int ARMR_POS [3] = {90, 28, 17} ;
+int MOUTH_POS [3] = {60, 95, 116} ;    //Stock predefined position ( for Fast and simple coding animation)
+int EYES_POS [3] = {60, 85, 102} ;
+int BROWL_POS [3] = {0, 90, 180} ;     
+int BROWR_POS [3] = {180, 90, 0} ;       
+int FLAG_POS [3] = {63, 120, 170} ;
 
 //Other Variables
 float Time ;
 float Time_0 ;
+float Waited ;
 
 int RdNumber ;
 
@@ -76,22 +73,19 @@ void setup(){
 
     pca.begin();
     pca.setPWMFreq(50);  // Analog servos run at ~50 Hz updates
+    Init_Servo() ;
 
     //Setup LED
     FastLED.addLeds<WS2812B, Pin_Strip_1>(Strip_1, NUM_LEDS_STRIP_1); //Strip 1
     FastLED.addLeds<WS2812B, Pin_Strip_2>(Strip_2, NUM_LEDS_STRIP_2); //Strip 2
-    //FastLED.addLeds<WS2812B, Pin_Strip_3>(Strip_3, NUM_LEDS_STRIP_3); //Strip 1
-    //FastLED.addLeds<WS2812B, Pin_Strip_4>(Strip_4, NUM_LEDS_STRIP_4); //Strip 2
-    //FastLED.addLeds<WS2812B, Pin_Strip_5>(Strip_5, NUM_LEDS_STRIP_5); //Strip 1
-    //FastLED.addLeds<WS2812B, Pin_Strip_6>(Strip_6, NUM_LEDS_STRIP_6); //Strip 2
     LED_POWER(LED_Brightness) ;
     
     //Initialise Color
     LED_all_Black() ;
     delay(1000);
-    LED_Color(120) ;
+    LED_Color(Body_Color) ;
+    LED_Color_Eyes(Eye_Color) ;
 
-    Init();  // Initialise servos
     Time_0 = Min() ;
     Time = Min() ;
 
@@ -102,36 +96,56 @@ void setup(){
     NozRightState = digitalRead(NozRightPin)  ;
     
     randomSeed(analogRead(0));  //Random seed generation
+
+    int Body_Color = random(0, 255) ; 
     
     delay(1000);
 }
 
 //-----------------------------------------------------------Main Loop--------------------------------------------------------------
 void loop(){
-    Time = Min() ;
-    //Veille() ;
-    //Animation() ;
-    //CheckNoze() ;
+    Time_Update() ;
+    
+    Veille() ;
+    CheckNoze() ;
+    //CheckCapaSensor() ;
+
+    Display() ;
+    Animation() ;
+    
+    Body_Color = (Body_Color%255) + 1 ;
+    Apply_Color_Body(Body_Color) ;
 }
 
+//---------------------------------------------------Display-----------------------------------------------------------------------
+void Display(){
+  Serial.print(RdNumber) ;
+  Serial.print("  |  ") ;
+  Serial.print(NozLeftState) ;
+  Serial.print("  |  ") ;
+  Serial.print(NozRightState) ;
+  Serial.print("  |  ") ;
+  Serial.print(Waited) ;
+  Serial.println(" ") ;
+}
 //---------------------------------------------------Moove predefined--------------------------------------------------------------
 
 //Function to moove the left arm to predefined position
 void ArmL(int POS){
   NEXT_POS[0] = ARML_POS[POS] ;
-  Moove_One(2,10,0);
+  Moove_One(3,40,0);
 }
 
 //Function to moove the right arm to predefined position
 void ArmR(int POS){
   NEXT_POS[1] = ARMR_POS[POS] ;
-  Moove_One(2,10,1);
+  Moove_One(3,40,1);
 }
 
 //Function to moove the Mouth to predefined position
 void Mouth(int POS){
   NEXT_POS[2] = MOUTH_POS[POS] ;
-  Moove_One(1,15,2);
+  Moove_One(3,20,2);
 }
 
 //Function to moove the Flag to predefined position
@@ -159,6 +173,12 @@ void Flag(int POS){
 }
 
 //----------------------------------------------------------Annexes----------------------------------------------------------------
+//Update time
+void Time_Update(){
+    Time = Min() ;
+    Waited = Time - Time_0 ;
+}
+
 //Function angle to impulson usualy (0-180° to 400-2400us)
 int AngleToImp(double x,int i){
      int imp=(x - MIN_ANG[i]) * (MAX_IMP[i]-MIN_IMP[i]) / (MAX_ANG[i]-MIN_ANG[i]) + MIN_IMP[i];
@@ -214,15 +234,31 @@ void LED_Color(int Color){
       delay(1000/UPDATERATE);
       FastLED.show();
   }
-  for(int i = 0; i < NUM_LEDS_STRIP_2; i++) {
+  for(int i = 0; i < NUM_LEDS_STRIP_2 - 2; i++) {
       //Serial.println(i) ;
       Strip_2[i] = CHSV(Color, 255, 255);
       delay(1000/UPDATERATE);
       FastLED.show();
   }
- 
 }
 
+void LED_Color_Eyes(int Color_Eyes){
+    Strip_2[27] = CHSV(Color_Eyes, 255, 255);
+    Strip_2[28] = CHSV(Color_Eyes, 255, 255);
+    delay(1000/UPDATERATE);
+    FastLED.show();
+}
+
+void Apply_Color_Body(int Color){
+  for(int i = 0; i < NUM_LEDS_STRIP_1; i++) {
+      Strip_1[i] = CHSV(Color, 255, 255);
+  }
+  for(int i = 0; i < NUM_LEDS_STRIP_2 - 2; i++) {
+      Strip_2[i] = CHSV(Color, 255, 255);
+  }
+  delay(1000/UPDATERATE);
+  FastLED.show();
+}
 //---------------------------------------------------------Moove One------------------------------------------------------------
 
 //Moove one servo with the specified speed and delay between each inc 
@@ -237,48 +273,107 @@ void Moove_One(int Speed,int wait, int Servos){
 
 //----------------------------------------------------------Wait--------------------------------------------------------------------
 void Veille() {
-  float Waited = Time - Time_0 ;
-
-  Serial.println(Waited) ;
-  
   if ( 4 < Waited ){
     Serial.println("Veille 5");     
-    BrowL(1);
-    BrowR(1);
-    Flag(1);
+    RdNumber = 305 ;
     }
   else if ( 3 < Waited and Waited < 3.1 ){
     Serial.println("Veille 4");
-    ArmL(0);
-    ArmR(2);
+    RdNumber = 304 ;
     }
   else if ( 2 < Waited and Waited < 2.1 ){
     Serial.println("Veille 3");
-    Eyes(2);     
-    BrowL(2);
-    BrowR(2);
+    RdNumber = 303 ;
     }
   else if ( 1.5 < Waited and Waited < 1.6 ){
     Serial.println("Veille 2");
-    Eyes(0);     
-    BrowL(0);
-    BrowR(0);
+    RdNumber = 302 ;
     }
   else if ( 1 < Waited and Waited < 1.1 ){
     Serial.println("Veille 1");     
-    BrowL(2);
-    BrowR(2);
+    RdNumber = 301 ;
     }
   else if ( 0.5 < Waited and Waited < 0.6 ){
     Serial.println("Veille 0");
-    BrowL(0);
-    BrowR(0);
+    RdNumber = 300 ;
     }
 }
 
 //-----------------------------------------------Animations----------------------------------------------------------
 void Animation() {
-  //Serial.println("Animation") ;
+    
+    switch (RdNumber) {
+      //----------------------------------------------------------------Left side----------------------------------------------
+      case 100:
+          Mouth(0);
+          Eyes(0);
+          delay(50);
+          Eyes(2);
+          delay(50);
+          Eyes(1);
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+          Mouth(2);
+      break;
+      case 101:
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+      break;
+      case 102:
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+      break;
+      case 103:
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+      break;
+      case 104:
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+      break;
+      case 105:
+          ArmL(1);
+          delay(100);
+          ArmL(0);
+      break;
+      //--------------------------------------------------------Right Side--------------------------------------------------------
+      case 200:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+      case 201:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+      case 202:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+      case 203:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+      case 204:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+      case 205:
+          ArmR(1);
+          delay(100);
+          ArmR(0);
+      break;
+  } 
+  RdNumber = 0 ;
 //     ArmL(0);
 //     ArmR(0);
 //     Mouth(0);
@@ -286,66 +381,38 @@ void Animation() {
 //     BrowL(0);
 //     BrowR(0);
 //     Flag(0);
-
-//       Eyes(0);
-//       Mouth(0);
-//       BrowL(0);
-//       BrowR(0);
-         //ArmL(0);
-         //ArmR(0);
-       delay(1000);
-//       Eyes(1);
-//       Mouth(1);
-//       BrowL(1);
-//       BrowR(1);
-         //ArmL(1);
-         //ArmR(1);
-       delay(1000);
-//       Eyes(2);
-//       Mouth(2);
-//       BrowL(2);
-//       BrowR(2);
-         //ArmL(2);
-         //ArmR(0);
-       delay(1000);
-         //Eyes(2);
-//       Mouth(2);
-//       BrowL(2);
-//       BrowR(2);
-         //ArmL(2);
-         //ArmR(2);
-       delay(1000);
 }
 
 //-------------------------------------------------Check Noze + Generate Rd Number------------------------------------------------------------------------------
 void CheckNoze() {
-  //Serial.println("CheckNoze") ;
   NozLeftState = digitalRead(NozLeftPin) ;
   NozRightState = digitalRead(NozRightPin)  ;
-
+  
   if (NozLeftState == HIGH){
-      RdNumber = random(100, 110) ;
+      RdNumber = 100 ; //random(100, 110) ;
       Time_0 = Min() ;
     }
-
   else if (NozRightState == HIGH){
       RdNumber = random(200, 210) ;
       Time_0 = Min() ;
     }
+}
 
-  else {
-      RdNumber = 0 ;
-    }
-
-  //Serial.print(NozLeftState) ;
-  //Serial.print("  |  ") ;
-  //Serial.println(NozRightState) ;
-  Serial.println(RdNumber) ;
+//---------------------------------------------------Check Capacitiv sensor--------------------------------------------------------------
+void CheckCapaSensor(){
+  Serial.println("Check capacitif : ") ;
+  long Capa_Sensor_1 = cs_4_5.capacitiveSensor(30);
+  long Capa_Sensor_2 = cs_4_8.capacitiveSensor(30);
+  Serial.print(Capa_Sensor_1) ;
+  Serial.print("   |   ") ;
+  Serial.println(Capa_Sensor_2) ;
+  delay(500);
 }
 
 //---------------------------------------------------Initialisation Servos--------------------------------------------------------------
 //Function to initialise cuby's servos controlled by PCA9685 I2C Module
-void Init(){
+void Init_Servo(){
+     Serial.println("Init servo");
      for (int i = 0; i < nbPCAServo; i++) {
       
 //        Serial.print("Servo : ");
